@@ -30,6 +30,7 @@ import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import static java.util.Comparator.comparing;
+import static java.util.Comparator.comparingInt;
 import static java.util.Comparator.naturalOrder;
 import static java.util.Comparator.nullsFirst;
 
@@ -48,6 +49,7 @@ public class TestResult implements Serializable, Nameable, Parameterizable, Stat
     protected String fullName;
     protected String historyId;
     protected String testId;
+    protected int ordering;
     protected Time time = new Time();
     protected String description;
     protected String descriptionHtml;
@@ -150,7 +152,7 @@ public class TestResult implements Serializable, Nameable, Parameterizable, Stat
     }
 
     public static Comparator<TestResult> comparingByTimeAsc() {
-        return comparing(
+        return comparingInt(TestResult::getOrdering).thenComparing(
                 TestResult::getTime,
                 nullsFirst(comparing(Time::getStart, nullsFirst(naturalOrder())))
         );

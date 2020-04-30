@@ -53,6 +53,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -152,6 +153,7 @@ public class JunitXmlPlugin implements Reader {
     private void parseTestSuite(final XmlElement testSuiteElement, final Path parsedFile,
                                 final RandomUidContext context, final ResultsVisitor visitor,
                                 final Path resultsDirectory) {
+        final AtomicInteger ordering = new AtomicInteger(0);
         final String name = testSuiteElement.getAttribute(NAME_ATTRIBUTE_NAME);
         final String hostname = testSuiteElement.getAttribute(HOSTNAME_ATTRIBUTE_NAME);
         final String timestamp = testSuiteElement.getAttribute(TIMESTAMP_ATTRIBUTE_NAME);
@@ -161,7 +163,8 @@ public class JunitXmlPlugin implements Reader {
                 .setTimestamp(getUnix(timestamp));
         testSuiteElement.get(TEST_CASE_ELEMENT_NAME)
                 .forEach(element -> parseTestCase(info, element,
-                                                  resultsDirectory, parsedFile, context, visitor));
+                                                  resultsDirectory, parsedFile, context, visitor,
+                                                  ordering.incrementAndGet()));
     }
 
     private Long getUnix(final String timestamp) {
@@ -173,10 +176,11 @@ public class JunitXmlPlugin implements Reader {
     }
 
     private void parseTestCase(final TestSuiteInfo info, final XmlElement testCaseElement, final Path resultsDirectory,
-                               final Path parsedFile, final RandomUidContext context, final ResultsVisitor visitor) {
+                               final Path parsedFile, final RandomUidContext context, final ResultsVisitor visitor,
+                               final int ordering) {
         final String className = testCaseElement.getAttribute(CLASS_NAME_ATTRIBUTE_NAME);
         final Status status = getStatus(testCaseElement);
-        final TestResult result = createStatuslessTestResult(info, testCaseElement, parsedFile, context);
+        final TestResult result = createStatuslessTestResult(info, testCaseElement, parsedFile, context, ordering);
         result.setStatus(status);
         result.setFlaky(isFlaky(testCaseElement));
         setStatusDetails(result, testCaseElement);
@@ -198,7 +202,7 @@ public class JunitXmlPlugin implements Reader {
         visitor.visitTestResult(result);
 
         RETRIES.forEach((elementName, retryStatus) -> testCaseElement.get(elementName).forEach(failure -> {
-            final TestResult retried = createStatuslessTestResult(info, testCaseElement, parsedFile, context);
+            final TestResult retried = createStatuslessTestResult(info, testCaseElement, parsedFile, context, ordering);
             retried.setHidden(true);
             retried.setStatus(retryStatus);
             retried.setStatusMessage(failure.getAttribute(MESSAGE_ATTRIBUTE_NAME));
@@ -227,7 +231,8 @@ public class JunitXmlPlugin implements Reader {
     }
 
     private TestResult createStatuslessTestResult(final TestSuiteInfo info, final XmlElement testCaseElement,
-                                                  final Path parsedFile, final RandomUidContext context) {
+                                                  final Path parsedFile, final RandomUidContext context,
+                                                  final int ordering) {
         final String className = testCaseElement.getAttribute(CLASS_NAME_ATTRIBUTE_NAME);
         final Optional<String> suiteName = firstNotNull(info.getName(), className);
         final String name = testCaseElement.getAttribute(NAME_ATTRIBUTE_NAME);
@@ -239,6 +244,7 @@ public class JunitXmlPlugin implements Reader {
         result.setUid(context.getValue().get());
         result.setName(isNull(name) ? "Unknown test case" : name);
         result.setTime(getTime(info.getTimestamp(), testCaseElement, parsedFile));
+        result.setOrdering(ordering);
         result.addLabelIfNotExists(RESULT_FORMAT, JUNIT_RESULTS_FORMAT);
 
         suiteName.ifPresent(s -> result.addLabelIfNotExists(LabelName.SUITE, s));
